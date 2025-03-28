@@ -1,0 +1,90 @@
+services:
+  # HTTP SERVER
+  users-http:
+    build:
+      context: .
+      args:
+        - TAG=http
+      dockerfile: Dockerfile
+    container_name: users_http
+    environment:
+      SQL_DSN: ${SQL_DSN}
+      CREATE_USER_TOPIC: ${CREATE_USER_TOPIC}
+      UPDATE_USER_TOPIC: ${UPDATE_USER_TOPIC}
+      EXECUTABLE: "users-http"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - users-database
+    networks:
+      - users-net
+    restart: always
+  # MESSAGE RELAY
+  users-relay:
+    build:
+      context: .
+      args:
+        - TAG=relay
+      dockerfile: Dockerfile
+    container_name: users_relay
+    environment:
+      SQL_DSN: ${SQL_DSN}
+      KAFKA_SERVERS: ${KAFKA_SERVERS}
+      CREATE_USER_TOPIC: ${CREATE_USER_TOPIC}
+      UPDATE_USER_TOPIC: ${UPDATE_USER_TOPIC}
+      EXECUTABLE: "users-relay"
+    depends_on:
+      - kafka
+      - users-database
+    networks:
+      - kafka_net
+      - users-net
+    restart: always
+  # DATABASE
+  users-database:
+    image: "postgres:17.3-alpine3.21"
+    container_name: users_database
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./scripts/sql/:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - users-net
+  # KAFKA BROKER
+  kafka:
+    image: apache/kafka-native
+    container_name: kafka_broker
+    ports:
+      - "9091:9091"
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      # Configure listeners for both docker and host communication
+      KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      # Settings required for KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
+      # Listener to use for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # Required for a single node cluster
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - kafka_net
+    restart: always
+volumes:
+  postgres_data:
+    name: "goarch_users_database"
+networks:
+  users-net:
+    driver: bridge
+  kafka_net:
+    driver: bridge
