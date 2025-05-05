@@ -37,11 +37,11 @@ type (
 
 	// MessageSender defines a way to send a Message
 	MessageSender interface {
-		SendMessage(context.Context, *Message) error
+		SendMessage(context.Context, ...Message) error
 	}
 
 	// MessageDeliveryConfirmer defines a way to confirm the delivery of a Message
 	MessageDeliveryConfirmer interface {
-		ConfirmMessageDelivery(context.Context, uint64) error
+		ConfirmMessageDelivery(context.Context, ...Message) error
 	}
 )

@@ -70,26 +70,20 @@ func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
 	}
 }
 
-func (m *messagesRelay) relayMessages(ctx context.Context, messages []Message) error {
+func (m *messagesRelay) relayMessages(ctx context.Context, messages []Message) (err error) {
 	m.info.Printf("Relaying %d messages...", len(messages))
 
-	var err error
-
-	for i := range messages {
-		err = m.sender.SendMessage(ctx, &messages[i])
-		if err != nil {
-			m.error.Printf("Message %d: '%[2]v' %[2]T", messages[i].ID, err)
-			continue
-		}
-
-		m.info.Printf("Message %d sent", messages[i].ID)
-
-		err = m.confirmer.ConfirmMessageDelivery(ctx, messages[i].ID)
-		if err != nil {
-			m.error.Printf("Failed to confirm message %d\n", messages[i].ID)
-			continue
-		}
+	err = m.sender.SendMessage(ctx, messages...)
+	if err != nil {
+		m.error.Printf("Failed to sent messages: %v", err)
+		return
 	}
 
-	return nil
+	err = m.confirmer.ConfirmMessageDelivery(ctx, messages...)
+	if err != nil {
+		m.error.Printf("Failed to confirm messages: %v", err)
+		return
+	}
+
+	return
 }

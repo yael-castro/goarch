@@ -21,9 +21,9 @@ type senderRetryer struct {
 	business.MessageSender
 }
 
-func (r senderRetryer) SendMessage(ctx context.Context, message *business.Message) (err error) {
+func (r senderRetryer) SendMessage(ctx context.Context, messages ...business.Message) (err error) {
 	for {
-		err = r.MessageSender.SendMessage(ctx, message)
+		err = r.MessageSender.SendMessage(ctx, messages...)
 		if !errors.Is(err, gobreaker.ErrOpenState) {
 			return
 		}

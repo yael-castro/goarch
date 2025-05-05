@@ -74,7 +74,12 @@ type messageDeliveryConfirmer struct {
 	db *sql.DB
 }
 
-func (m messageDeliveryConfirmer) ConfirmMessageDelivery(ctx context.Context, messageID uint64) error {
-	_, err := m.db.ExecContext(ctx, updatePurchaseMessage, messageID)
-	return err
+func (m messageDeliveryConfirmer) ConfirmMessageDelivery(ctx context.Context, messages ...business.Message) (err error) {
+	stmt, args, err := updatePurchaseMessages(messages)
+	if err != nil {
+		return
+	}
+
+	_, err = m.db.ExecContext(ctx, stmt, args...)
+	return
 }
