@@ -23,9 +23,9 @@ type senderBreaker struct {
 	sender  business.MessageSender
 }
 
-func (m senderBreaker) SendMessage(ctx context.Context, message *business.Message) (err error) {
+func (m senderBreaker) SendMessage(ctx context.Context, messages ...business.Message) (err error) {
 	_, err = m.breaker.Execute(func() (struct{}, error) {
-		return struct{}{}, m.sender.SendMessage(ctx, message)
+		return struct{}{}, m.sender.SendMessage(ctx, messages...)
 	})
 
 	return

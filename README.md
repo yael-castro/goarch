@@ -3,9 +3,10 @@ The purpose of this repository is to show my mastery of the following topics:
 - Docker
 - Graceful shutdown
 - Horizontal scaling
-- Hexagonal pattern
-- Circuit breaker pattern
-- Transactional outbox pattern
+- [Hexagonal pattern](https://alistair.cockburn.us/hexagonal-architecture/)
+- [Circuit breaker pattern](https://www.geeksforgeeks.org/what-is-circuit-breaker-pattern-in-microservices/)
+- [Transactional outbox pattern](https://microservices.io/patterns/data/transactional-outbox.html)
+- Design patterns ([Singleton](https://refactoring.guru/design-patterns/singleton), [Bridge](https://refactoring.guru/design-patterns/bridge), [Decorator](https://refactoring.guru/design-patterns/decorator))
 <!-- TODO: - Caching (LRU) -->
 
 To demonstrate this I built an API to manage user-related operations.
