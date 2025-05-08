@@ -26,6 +26,4 @@ const (
 		ORDER BY created_at ASC
 		LIMIT $1
 	`
-
-	updatePurchaseMessage = `UPDATE outbox_messages SET updated_at = now(), delivered_at = now() WHERE id = $1`
 )

@@ -17,10 +17,35 @@ type MessagesRelayConfig struct {
 	ErrorLogger *log.Logger
 }
 
+func (m MessagesRelayConfig) Validate() error {
+	err := errors.New("some config is nil")
+
+	if m.Confirmer == nil {
+		return err
+	}
+
+	if m.Reader == nil {
+		return err
+	}
+
+	if m.Sender == nil {
+		return err
+	}
+
+	if m.InfoLogger == nil {
+		return err
+	}
+
+	if m.ErrorLogger == nil {
+		return err
+	}
+
+	return nil
+}
+
 func NewMessagesRelay(config MessagesRelayConfig) (MessagesRelay, error) {
-	// TODO: avoid a line too long
-	if config.Confirmer == nil || config.InfoLogger == nil || config.Reader == nil || config.Sender == nil || config.ErrorLogger == nil {
-		return nil, errors.New("missing settings")
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &messagesRelay{
@@ -41,17 +66,19 @@ type messagesRelay struct {
 }
 
 func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
-	var messages []Message
+	const messageLimit = 100
+
+	length := 0
+	messages := make([]Message, messageLimit)
 
 	for {
-		const messageLimit = 100
-		messages, err = m.reader.ReadMessages(ctx, messageLimit) // TODO: recicle slice to avoid reallocate memory
+		length, err = m.reader.ReadMessages(ctx, messages)
 		if err != nil {
 			return
 		}
 
 		// Waiting to poll more messages
-		if len(messages) == 0 {
+		if length <= 0 {
 			const retryDelay = 100 * time.Millisecond
 
 			select {
@@ -63,7 +90,7 @@ func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
 		}
 
 		// Relaying messages...
-		err = m.relayMessages(ctx, messages)
+		err = m.relayMessages(ctx, messages[:length])
 		if err != nil && !errors.Is(err, ErrUnableToDeliverMessages) {
 			return
 		}
@@ -71,7 +98,7 @@ func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
 }
 
 func (m *messagesRelay) relayMessages(ctx context.Context, messages []Message) (err error) {
-	m.info.Printf("Relaying %d messages...", len(messages))
+	m.info.Printf("Relaying %d messages...\n", len(messages))
 
 	err = m.sender.SendMessage(ctx, messages...)
 	if err != nil {
@@ -79,11 +106,14 @@ func (m *messagesRelay) relayMessages(ctx context.Context, messages []Message) (
 		return
 	}
 
+	m.info.Printf("Relayed %d messages\n", len(messages))
+
 	err = m.confirmer.ConfirmMessageDelivery(ctx, messages...)
 	if err != nil {
 		m.error.Printf("Failed to confirm messages: %v", err)
 		return
 	}
 
+	m.info.Printf("Confirmed %d messages\n", len(messages))
 	return
 }

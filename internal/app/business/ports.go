@@ -32,7 +32,7 @@ type (
 	// MessagesReader defines a way to read the pending Message(s)
 	MessagesReader interface {
 		io.Closer
-		ReadMessages(context.Context, int) ([]Message, error)
+		ReadMessages(context.Context, []Message) (int, error)
 	}
 
 	// MessageSender defines a way to send a Message

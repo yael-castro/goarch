@@ -21,19 +21,20 @@ type messageReader struct {
 	info *log.Logger
 }
 
-func (p messageReader) ReadMessages(ctx context.Context, limit int) ([]business.Message, error) {
-	rows, err := p.db.QueryContext(ctx, selectPurchaseMessages, limit)
+func (p messageReader) ReadMessages(ctx context.Context, messages []business.Message) (int, error) {
+	rows, err := p.db.QueryContext(ctx, selectPurchaseMessages, len(messages))
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
 	defer func() {
 		_ = rows.Close()
 	}()
 
-	const expectedMessages = 100
-	messages := make([]business.Message, 0, expectedMessages)
+	index := -1
 
 	for rows.Next() {
+		index++
+
 		message := Message{}
 
 		var rawHeaders []byte
@@ -46,18 +47,19 @@ func (p messageReader) ReadMessages(ctx context.Context, limit int) ([]business.
 			&message.Value,
 		)
 		if err != nil {
-			return nil, err
+			return -1, err
 		}
 
 		err = message.Headers.UnmarshalBinary(rawHeaders)
 		if err != nil {
-			return nil, err
+			return -1, err
 		}
 
-		messages = append(messages, *message.ToBusiness())
+		messages[index] = *message.ToBusiness()
 	}
 
-	return messages, nil
+	length := index + 1
+	return length, nil
 }
 
 func (messageReader) Close() error {
