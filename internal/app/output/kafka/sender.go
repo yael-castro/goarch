@@ -41,7 +41,6 @@ func (p *messageSender) SendMessage(ctx context.Context, messages ...business.Me
 }
 
 func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Message) error {
-	// Locking until message was sent
 	p.Lock()
 	defer p.Unlock()
 
@@ -55,7 +54,7 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 			p.error.Println("PURGE:", err)
 		}
 
-		close(deliveryChan) // TODO: avoid panic closing channel
+		// TODO: find a way to confirm messages that are sent from the batch to prevent them from being sent twice in subsequent retries
 	}()
 
 	for i := range messages {
