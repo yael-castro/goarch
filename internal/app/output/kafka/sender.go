@@ -32,7 +32,7 @@ type messageSender struct {
 }
 
 func (p *messageSender) SendMessage(ctx context.Context, messages ...business.Message) error {
-	const maxWaitTime = 1_500 * time.Millisecond
+	const maxWaitTime = 2 * time.Second
 
 	ctx, cancel := context.WithTimeout(ctx, maxWaitTime)
 	defer cancel()
@@ -55,7 +55,7 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 			p.error.Println("PURGE:", err)
 		}
 
-		close(deliveryChan)
+		close(deliveryChan) // TODO: avoid panic closing channel
 	}()
 
 	for i := range messages {
