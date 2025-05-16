@@ -6,6 +6,8 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"github.com/yael-castro/goarch/pkg/env"
+	"log/slog"
+	"os"
 	"sync"
 )
 
@@ -15,28 +17,53 @@ type Container interface {
 }
 
 type container struct {
-	db  *sql.DB
-	mux sync.Mutex
+	sync.Mutex
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 func (c *container) Inject(ctx context.Context, a any) error {
 	switch a := a.(type) {
 	case **sql.DB:
 		return c.injectDB(ctx, a)
+	case **slog.Logger:
+		return c.injectLogger(ctx, a)
 	}
 
 	return fmt.Errorf("type \"%T\" is not supported", a)
 }
 
 func (c *container) Close(_ context.Context) error {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.Lock()
+	defer c.Unlock()
 
 	if c.db != nil {
 		return c.db.Close()
 	}
 
 	return nil
+}
+
+func (c *container) injectLogger(ctx context.Context, logger **slog.Logger) (err error) {
+	err = c.initLogger(ctx)
+	if err != nil {
+		return
+	}
+
+	*logger = c.logger
+	return
+}
+
+func (c *container) initLogger(context.Context) (err error) {
+	c.Lock()
+	defer c.Unlock()
+
+	if c.logger != nil {
+		return
+	}
+
+	c.logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	return
 }
 
 func (c *container) injectDB(ctx context.Context, db **sql.DB) (err error) {
@@ -50,8 +77,8 @@ func (c *container) injectDB(ctx context.Context, db **sql.DB) (err error) {
 }
 
 func (c *container) initDB(ctx context.Context) (err error) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.Lock()
+	defer c.Unlock()
 
 	if c.db != nil {
 		return

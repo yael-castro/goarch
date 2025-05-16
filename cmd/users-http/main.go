@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/yael-castro/goarch/internal/container"
 	"github.com/yael-castro/goarch/internal/runtime"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,18 +15,34 @@ import (
 )
 
 func main() {
+	// Setting exit code
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
 	// Building main context
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
 
-	// Declaration of dependencies
-	var e *echo.Echo
-
-	// Injecting dependencies
+	// Building DI container
 	c := container.New()
 
+	// Injecting logger
+	var logger *slog.Logger
+
+	if err := c.Inject(ctx, &logger); err != nil {
+		exitCode = 1
+		return
+	}
+
+	slog.SetDefault(logger) // Setting default logger
+
+	// Injecting dependencies
+	var e *echo.Echo
+
 	if err := c.Inject(ctx, &e); err != nil {
-		log.Println(err)
+		slog.ErrorContext(ctx, "failed_server_built", "error", err)
 		return
 	}
 
@@ -55,21 +71,22 @@ func main() {
 	go func() {
 		defer close(errCh)
 
-		log.Printf("Server http version '%s' is running on port '%s'\n", runtime.GitCommit, port)
+		slog.InfoContext(ctx, "http_server_is_running", "version", runtime.GitCommit, "port", port)
 		errCh <- e.Start(":" + port)
 	}()
 
 	// Waiting for cancellation or error
 	select {
 	case <-ctx.Done():
-		stop()
 		<-shutdownCh
 
 	case err := <-errCh:
 		stop()
 		<-shutdownCh
 
-		log.Fatal(err)
+		exitCode = 1
+
+		slog.Error("", err)
 	}
 }
 
@@ -81,18 +98,16 @@ func shutdown(c container.Container, e *echo.Echo) {
 	// Closing http server
 	err := e.Shutdown(ctx)
 	if err != nil {
-		log.Println(err)
+		slog.ErrorContext(ctx, "failed_server_shutdown", "error", err)
 		return
 	}
-
-	log.Println("Server shutdown gracefully")
 
 	// Closing DI container
 	err = c.Close(ctx)
 	if err != nil {
-		log.Println(err)
+		slog.ErrorContext(ctx, "failed_container_shutdown", "error", err)
 		return
 	}
 
-	log.Println("DI container gracefully closed")
+	slog.InfoContext(ctx, "success_shutdown")
 }

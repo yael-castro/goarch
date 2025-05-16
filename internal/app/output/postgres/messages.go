@@ -6,19 +6,19 @@ import (
 	"context"
 	"database/sql"
 	"github.com/yael-castro/goarch/internal/app/business"
-	"log"
+	"log/slog"
 )
 
-func NewMessagesReader(db *sql.DB, info *log.Logger) business.MessagesReader {
+func NewMessagesReader(db *sql.DB, logger *slog.Logger) business.MessagesReader {
 	return messageReader{
-		db:   db,
-		info: info,
+		db:     db,
+		logger: logger,
 	}
 }
 
 type messageReader struct {
-	db   *sql.DB
-	info *log.Logger
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 func (p messageReader) ReadMessages(ctx context.Context, messages []business.Message) (int, error) {

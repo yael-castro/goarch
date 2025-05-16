@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/yael-castro/goarch/internal/container"
 	"github.com/yael-castro/goarch/internal/runtime"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,19 +12,35 @@ import (
 )
 
 func main() {
+	// Setting exit code
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
 	// Building main context
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
 
-	// Declaration of dependencies
-	var cmd func(context.Context, ...string) int
-
-	// Injecting dependencies
+	// Building main command
 	c := container.New()
 
-	err := c.Inject(ctx, &cmd)
-	if err != nil {
-		log.Println(err)
+	// Injecting logger
+	var logger *slog.Logger
+
+	if err := c.Inject(ctx, &logger); err != nil {
+		exitCode = 1
+		return
+	}
+
+	slog.SetDefault(logger) // Setting a default logger
+
+	// Injecting command
+	var cmd func(context.Context, ...string) int
+
+	if err := c.Inject(ctx, &cmd); err != nil {
+		exitCode = 1
+		slog.Error("failed_command_built", "error", err)
 		return
 	}
 
@@ -54,20 +70,16 @@ func main() {
 	go func() {
 		defer close(exitCodeCh)
 
-		log.Printf("Message relay version '%s' is running", runtime.GitCommit)
+		slog.InfoContext(ctx, "message_relay_running", "version", runtime.GitCommit)
 		exitCodeCh <- cmd(ctx)
 	}()
 
 	// Waiting for cancellation or exit code
 	select {
 	case <-ctx.Done():
-		stop()
-		<-shutdownCh
-
-	case exitCode := <-exitCodeCh:
-		stop()
-		<-shutdownCh
-
-		os.Exit(exitCode)
+	case exitCode = <-exitCodeCh:
+		slog.InfoContext(ctx, "message_relay_exited", "exit_code", exitCode)
 	}
+
+	<-shutdownCh
 }

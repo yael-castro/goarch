@@ -13,22 +13,19 @@ import (
 	userskafka "github.com/yael-castro/goarch/internal/app/output/kafka"
 	"github.com/yael-castro/goarch/internal/app/output/postgres"
 	"github.com/yael-castro/goarch/pkg/env"
-	"log"
-	"os"
+	"log/slog"
 	"time"
 )
 
 func New() Container {
-	logger := log.New(os.Stdout, "[CONTAINER] ", log.LstdFlags)
-
 	return &usersRelay{
-		logger: logger,
+		logger: slog.Default(),
 	}
 }
 
 type usersRelay struct {
 	container
-	logger   *log.Logger
+	logger   *slog.Logger
 	producer *kafka.Producer
 }
 
@@ -47,9 +44,6 @@ func (r *usersRelay) Inject(ctx context.Context, a any) (err error) {
 
 func (r *usersRelay) injectCommand(ctx context.Context, cmd *func(context.Context, ...string) int) (err error) {
 	// External dependencies
-	errLogger := log.New(os.Stderr, "[ERROR] ", log.LstdFlags|log.Lshortfile)
-	infoLogger := log.New(os.Stdout, "[INFO] ", log.LstdFlags|log.Lshortfile)
-
 	var db *sql.DB
 	if err = r.Inject(ctx, &db); err != nil {
 		return
@@ -65,14 +59,18 @@ func (r *usersRelay) injectCommand(ctx context.Context, cmd *func(context.Contex
 		return
 	}
 
+	var logger *slog.Logger
+	if err = r.Inject(ctx, &logger); err != nil {
+		return
+	}
+
 	// Secondary adapters
 	confirmer := postgres.NewMessageDeliveryConfirmer(db)
 
-	reader := postgres.NewMessagesReader(db, infoLogger)
+	reader := postgres.NewMessagesReader(db, logger)
 
 	sender := userskafka.NewMessageSender(userskafka.MessageSenderConfig{
-		Info:     infoLogger,
-		Error:    errLogger,
+		Logger:   logger,
 		Producer: producer,
 	})
 
@@ -89,18 +87,17 @@ func (r *usersRelay) injectCommand(ctx context.Context, cmd *func(context.Contex
 
 	// Business logic
 	messagesRelay, err := business.NewMessagesRelay(business.MessagesRelayConfig{
-		Reader:      reader,
-		Sender:      sender,
-		Confirmer:   confirmer,
-		InfoLogger:  infoLogger,
-		ErrorLogger: errLogger,
+		Reader:    reader,
+		Sender:    sender,
+		Confirmer: confirmer,
+		Logger:    logger,
 	})
 	if err != nil {
 		return
 	}
 
 	// Primary adapters
-	cmdRelay, err := command.Relay(messagesRelay, errLogger)
+	cmdRelay, err := command.Relay(messagesRelay, logger)
 	if err != nil {
 		return
 	}
@@ -119,8 +116,8 @@ func (r *usersRelay) injectProducer(ctx context.Context, producer **kafka.Produc
 }
 
 func (r *usersRelay) initProducer(_ context.Context) (err error) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
+	r.Lock()
+	defer r.Unlock()
 
 	kafkaServers, err := env.Get("KAFKA_SERVERS")
 	if err != nil {
@@ -139,15 +136,18 @@ func (r *usersRelay) initProducer(_ context.Context) (err error) {
 	return
 }
 
-func (r *usersRelay) injectCircuitBreaker(_ context.Context, breaker **gobreaker.CircuitBreaker[struct{}]) (err error) {
+func (r *usersRelay) injectCircuitBreaker(ctx context.Context, breaker **gobreaker.CircuitBreaker[struct{}]) (err error) {
+	var logger *slog.Logger
+	if err = r.Inject(ctx, &logger); err != nil {
+		return err
+	}
+
 	const (
 		maxHalfRequests        = 1
 		maxConsecutiveFailures = 3
 		openStateTimeout       = 10 * time.Second
 		resetCounterInterval   = 10 * time.Second
 	)
-
-	logger := log.New(os.Stdout, "[CIRCUIT_BREAKER] ", log.LstdFlags)
 
 	*breaker = gobreaker.NewCircuitBreaker[struct{}](gobreaker.Settings{
 		Name:        "MessageSender",
@@ -158,7 +158,7 @@ func (r *usersRelay) injectCircuitBreaker(_ context.Context, breaker **gobreaker
 			return counts.ConsecutiveFailures > maxConsecutiveFailures
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
-			logger.Printf("%s: %s -> %s", name, from, to)
+			logger.Info("circuit_status_change", "name", name, "old", from, "new", to)
 		},
 		IsSuccessful: func(err error) bool {
 			return err == nil
@@ -171,15 +171,15 @@ func (r *usersRelay) injectCircuitBreaker(_ context.Context, breaker **gobreaker
 func (r *usersRelay) Close(ctx context.Context) (err error) {
 	if r.producer != nil {
 		r.producer.Close()
-		r.logger.Println("Kafka producer is closed")
+		r.logger.InfoContext(ctx, "kafka_producer_closed")
 	}
 
 	err = r.container.Close(ctx)
 	if err != nil {
-		r.logger.Println("Error trying to close container", err)
+		r.logger.InfoContext(ctx, "container_is_not_close", "error", err)
 		return
 	}
 
-	r.logger.Println("Container is closed")
+	r.logger.InfoContext(ctx, "container_is_closed")
 	return
 }

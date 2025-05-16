@@ -8,11 +8,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/yael-castro/goarch/internal/app/business"
-	http2 "github.com/yael-castro/goarch/internal/app/input/http"
+	"github.com/yael-castro/goarch/internal/app/input/http"
 	"github.com/yael-castro/goarch/internal/app/output/postgres"
 	"github.com/yael-castro/goarch/pkg/env"
-	"log"
-	"os"
+	"log/slog"
 )
 
 func New() Container {
@@ -26,13 +25,13 @@ type handler struct {
 func (h *handler) Inject(ctx context.Context, a any) error {
 	switch a := a.(type) {
 	case **echo.Echo:
-		return h.injectHandler(ctx, a)
+		return h.injectEcho(ctx, a)
 	}
 
 	return h.container.Inject(ctx, a)
 }
 
-func (h *handler) injectHandler(ctx context.Context, e **echo.Echo) (err error) {
+func (h *handler) injectEcho(ctx context.Context, e **echo.Echo) (err error) {
 	// Getting environment variables
 	createUserTopic, err := env.Get("CREATE_USER_TOPIC")
 	if err != nil {
@@ -46,19 +45,20 @@ func (h *handler) injectHandler(ctx context.Context, e **echo.Echo) (err error) 
 
 	// External dependencies
 	var db *sql.DB
-
 	if err = h.Inject(ctx, &db); err != nil {
 		return err
 	}
 
-	// infoLogger := log.New(os.Stdout, "[INFO] ", log.LstdFlags)
-	errLogger := log.New(os.Stderr, "[ERROR] ", log.LstdFlags)
+	var logger *slog.Logger
+	if err = h.Inject(ctx, &logger); err != nil {
+		return err
+	}
 
 	// Secondary adapters
 	userStore := postgres.NewUserStore(postgres.UserStoreConfig{
 		CreateUserTopic: createUserTopic,
 		UpdateUserTopic: updateUserTopic,
-		ErrLogger:       errLogger,
+		Logger:          logger,
 		DB:              db,
 	})
 
@@ -69,15 +69,16 @@ func (h *handler) injectHandler(ctx context.Context, e **echo.Echo) (err error) 
 	}
 
 	// Primary adapters
-	userHandler, err := http2.NewUserHandler(userCases)
+	userHandler, err := http.NewUserHandler(userCases)
 	if err != nil {
 		return err
 	}
 
+	// Building echo.Echo
 	n := echo.New()
 
 	// Setting error handler
-	n.HTTPErrorHandler = http2.ErrorHandler(n.HTTPErrorHandler)
+	n.HTTPErrorHandler = http.ErrorHandler(n.HTTPErrorHandler)
 
 	// Setting middlewares
 	n.Use(middleware.Recover(), middleware.Logger())
@@ -88,7 +89,11 @@ func (h *handler) injectHandler(ctx context.Context, e **echo.Echo) (err error) 
 	}
 
 	// Setting http routes
-	http2.SetRoutes(n, userHandler, dbCheck)
+	http.SetRoutes(n, userHandler, dbCheck)
+
+	// Disabling initial logs
+	n.HideBanner = true
+	n.HidePort = true
 
 	*e = n
 	return
