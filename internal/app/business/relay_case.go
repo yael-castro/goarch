@@ -5,16 +5,15 @@ package business
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 )
 
 type MessagesRelayConfig struct {
-	Confirmer   MessageDeliveryConfirmer
-	Reader      MessagesReader
-	Sender      MessageSender
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Confirmer MessageDeliveryConfirmer
+	Reader    MessagesReader
+	Sender    MessageSender
+	Logger    *slog.Logger
 }
 
 func (m MessagesRelayConfig) Validate() error {
@@ -32,11 +31,7 @@ func (m MessagesRelayConfig) Validate() error {
 		return err
 	}
 
-	if m.InfoLogger == nil {
-		return err
-	}
-
-	if m.ErrorLogger == nil {
+	if m.Logger == nil {
 		return err
 	}
 
@@ -52,8 +47,7 @@ func NewMessagesRelay(config MessagesRelayConfig) (MessagesRelay, error) {
 		confirmer: config.Confirmer,
 		reader:    config.Reader,
 		sender:    config.Sender,
-		info:      config.InfoLogger,
-		error:     config.ErrorLogger,
+		logger:    config.Logger,
 	}, nil
 }
 
@@ -61,8 +55,7 @@ type messagesRelay struct {
 	confirmer MessageDeliveryConfirmer
 	reader    MessagesReader
 	sender    MessageSender
-	info      *log.Logger
-	error     *log.Logger
+	logger    *slog.Logger
 }
 
 func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
@@ -98,22 +91,22 @@ func (m *messagesRelay) RelayMessages(ctx context.Context) (err error) {
 }
 
 func (m *messagesRelay) relayMessages(ctx context.Context, messages []Message) (err error) {
-	m.info.Printf("Relaying %d messages...\n", len(messages))
+	m.logger.InfoContext(ctx, "relaying_messages", "messages", len(messages))
 
 	err = m.sender.SendMessage(ctx, messages...)
 	if err != nil {
-		m.error.Printf("Failed to sent messages: %v", err)
+		m.logger.InfoContext(ctx, "failed_sent_messages", "error", err)
 		return
 	}
 
-	m.info.Printf("Relayed %d messages\n", len(messages))
+	m.logger.InfoContext(ctx, "relayed_messages", "messages", len(messages))
 
 	err = m.confirmer.ConfirmMessageDelivery(ctx, messages...)
 	if err != nil {
-		m.error.Printf("Failed to confirm messages: %v", err)
+		m.logger.ErrorContext(ctx, "failed_confirmations", "error", err)
 		return
 	}
 
-	m.info.Printf("Confirmed %d messages\n", len(messages))
+	m.logger.InfoContext(ctx, "confirmed_messages", "messages", len(messages))
 	return
 }

@@ -9,13 +9,14 @@ import (
 	"fmt"
 	"github.com/lib/pq"
 	"github.com/yael-castro/goarch/internal/app/business"
-	"log"
+	"log/slog"
+	"reflect"
 )
 
 type UserStoreConfig struct {
 	CreateUserTopic string
 	UpdateUserTopic string
-	ErrLogger       *log.Logger
+	Logger          *slog.Logger
 	DB              *sql.DB
 }
 
@@ -23,7 +24,7 @@ func NewUserStore(config UserStoreConfig) business.UserStore {
 	return userStore{
 		createUserTopic: config.CreateUserTopic,
 		updateUserTopic: config.UpdateUserTopic,
-		errLogger:       config.ErrLogger,
+		logger:          config.Logger,
 		db:              config.DB,
 	}
 }
@@ -31,7 +32,7 @@ func NewUserStore(config UserStoreConfig) business.UserStore {
 type userStore struct {
 	createUserTopic string
 	updateUserTopic string
-	errLogger       *log.Logger
+	logger          *slog.Logger
 	db              *sql.DB
 }
 
@@ -80,7 +81,7 @@ func (s userStore) createUser(ctx context.Context, tx *sql.Tx, userSQL *User) (e
 		userSQL.Email,
 	).Scan(&userSQL.ID)
 	if err != nil {
-		s.errLogger.Printf("inserting purchase record: %[1]v (%[1]T)", err)
+		s.logger.InfoContext(ctx, "failed_user_insert", "error", err, "error_type", reflect.TypeOf(err), "user_id", userSQL.ID)
 
 		// Error handling for postgres errors
 		var pqErr *pq.Error

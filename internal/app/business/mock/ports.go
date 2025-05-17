@@ -3,13 +3,11 @@ package mock
 import (
 	"context"
 	"github.com/yael-castro/goarch/internal/app/business"
-	"log"
 )
 
 type MessageSender struct{}
 
-func (MessageSender) SendMessage(ctx context.Context, message *business.Message) error {
-	log.Printf("MESSAGE: %+v", message)
+func (MessageSender) SendMessage(context.Context, *business.Message) error {
 	return nil
 }
 

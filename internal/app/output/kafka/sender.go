@@ -5,30 +5,28 @@ import (
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/yael-castro/goarch/internal/app/business"
-	"log"
+	"log/slog"
+	"reflect"
 	"sync"
 	"time"
 )
 
 type MessageSenderConfig struct {
 	Producer *kafka.Producer
-	Info     *log.Logger
-	Error    *log.Logger
+	Logger   *slog.Logger
 }
 
 func NewMessageSender(config MessageSenderConfig) business.MessageSender {
 	return &messageSender{
 		producer: config.Producer,
-		error:    config.Error,
-		info:     config.Info,
+		logger:   config.Logger,
 	}
 }
 
 type messageSender struct {
 	sync.Mutex
 	producer *kafka.Producer
-	info     *log.Logger
-	error    *log.Logger
+	logger   *slog.Logger
 }
 
 func (p *messageSender) SendMessage(ctx context.Context, messages ...business.Message) error {
@@ -51,7 +49,7 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 	defer func() {
 		err := p.producer.Purge(kafka.PurgeQueue)
 		if err != nil {
-			p.error.Println("PURGE:", err)
+			p.logger.WarnContext(ctx, "kafka_purge_queue", "error", err)
 		}
 
 		// TODO: find a way to confirm messages that are sent from the batch to prevent them from being sent twice in subsequent retries
@@ -81,7 +79,7 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 		case evt = <-deliveryChan:
 		}
 
-		err := p.evaluateEvt(evt)
+		err := p.evaluateEvt(ctx, evt)
 		if err != nil {
 			return err
 		}
@@ -93,19 +91,19 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 }
 
 // evaluateEvt evaluates the received event to know if there is an error
-func (p *messageSender) evaluateEvt(evt kafka.Event) error {
+func (p *messageSender) evaluateEvt(ctx context.Context, evt kafka.Event) error {
 	switch evt := evt.(type) {
 	case *kafka.Message:
 		if evt.TopicPartition.Error != nil {
 			return evt.TopicPartition.Error
 		}
 
-		p.info.Printf("Message in topic %s[%d] at offset %d", *evt.TopicPartition.Topic, evt.TopicPartition.Partition, evt.TopicPartition.Offset)
+		p.logger.InfoContext(ctx, "sent_kafka_message", "topic", *evt.TopicPartition.Topic, "partition", evt.TopicPartition.Partition, "offset", evt.TopicPartition.Offset)
 		return nil // No error
 	case kafka.Error:
 		return fmt.Errorf("%w: communication issues '%v'", business.ErrMessageDeliveryFailed, evt)
 	}
 
-	p.error.Printf("Unknown event: %[1]T (%[1]T)\n", evt)
+	p.logger.ErrorContext(ctx, "unknown_kafka_event", "event", evt, "event_type", reflect.TypeOf(evt).String())
 	return fmt.Errorf("it seems that the message '%s' could not be sent", evt.String())
 }
