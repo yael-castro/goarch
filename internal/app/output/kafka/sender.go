@@ -6,6 +6,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/yael-castro/goarch/internal/app/business"
 	"log/slog"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -48,7 +49,7 @@ func (p *messageSender) sendMessage(ctx context.Context, messages ...business.Me
 	defer func() {
 		err := p.producer.Purge(kafka.PurgeQueue)
 		if err != nil {
-			p.logger.DebugContext(ctx, "PURGE:", err)
+			p.logger.WarnContext(ctx, "kafka_purge_queue", "error", err)
 		}
 
 		// TODO: find a way to confirm messages that are sent from the batch to prevent them from being sent twice in subsequent retries
@@ -97,12 +98,12 @@ func (p *messageSender) evaluateEvt(ctx context.Context, evt kafka.Event) error 
 			return evt.TopicPartition.Error
 		}
 
-		p.logger.InfoContext(ctx, "Message in topic %s[%d] at offset %d", *evt.TopicPartition.Topic, evt.TopicPartition.Partition, evt.TopicPartition.Offset)
+		p.logger.InfoContext(ctx, "sent_kafka_message", "topic", *evt.TopicPartition.Topic, "partition", evt.TopicPartition.Partition, "offset", evt.TopicPartition.Offset)
 		return nil // No error
 	case kafka.Error:
 		return fmt.Errorf("%w: communication issues '%v'", business.ErrMessageDeliveryFailed, evt)
 	}
 
-	p.logger.ErrorContext(ctx, "Unknown event: %[1]T (%[1]T)\n", evt)
+	p.logger.ErrorContext(ctx, "unknown_kafka_event", "event", evt, "event_type", reflect.TypeOf(evt).String())
 	return fmt.Errorf("it seems that the message '%s' could not be sent", evt.String())
 }

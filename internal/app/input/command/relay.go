@@ -21,7 +21,7 @@ func Relay(relay business.MessagesRelay, logger *slog.Logger) (func(context.Cont
 	return func(ctx context.Context, _ ...string) int {
 		err := relay.RelayMessages(ctx)
 		if err != nil {
-			logger.ErrorContext(ctx, err.Error())
+			logger.ErrorContext(ctx, "fatal_error_message_relay", "error", err)
 			return fatalExitCode
 		}
 
