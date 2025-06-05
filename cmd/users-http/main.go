@@ -71,23 +71,23 @@ func main() {
 	go func() {
 		defer close(errCh)
 
-		slog.InfoContext(ctx, "http_server_is_running", "version", runtime.GitCommit, "port", port)
+		slog.InfoContext(ctx, "running", "version", runtime.GitCommit, "port", port)
 		errCh <- e.Start(":" + port)
 	}()
 
 	// Waiting for cancellation or error
+	var err error
+
 	select {
 	case <-ctx.Done():
-		<-shutdownCh
-
-	case err := <-errCh:
-		stop()
-		<-shutdownCh
-
+	case err = <-errCh:
 		exitCode = 1
-
-		slog.Error("", err)
 	}
+
+	stop()
+	<-shutdownCh
+
+	slog.Error("exit", "code", exitCode, "error", err)
 }
 
 func shutdown(c container.Container, e *echo.Echo) {

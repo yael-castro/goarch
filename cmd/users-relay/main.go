@@ -70,7 +70,7 @@ func main() {
 	go func() {
 		defer close(exitCodeCh)
 
-		slog.InfoContext(ctx, "message_relay_running", "version", runtime.GitCommit)
+		slog.InfoContext(ctx, "running", "version", runtime.GitCommit)
 		exitCodeCh <- cmd(ctx)
 	}()
 
@@ -78,8 +78,10 @@ func main() {
 	select {
 	case <-ctx.Done():
 	case exitCode = <-exitCodeCh:
-		slog.InfoContext(ctx, "message_relay_exited", "exit_code", exitCode)
 	}
 
+	stop()
 	<-shutdownCh
+
+	slog.InfoContext(ctx, "exit", "code", exitCode)
 }
