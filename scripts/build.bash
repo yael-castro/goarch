@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # Variables for only read
-runtime="github.com/yael-castro/orbi/a/internal/runtime"
-# commit=$(git log --pretty=format:'%h' -n 1)
-commit='unknown'
+runtime="github.com/yael-castro/goarch/internal/runtime"
+commit=$(git log --pretty=format:'%h' -n 1) || echo 'unknown'
 
 # Command arguments
 subcommand="$1"
@@ -47,6 +46,7 @@ if [ "$subcommand" = "relay" ]; then
 fi
 
 if [ "$subcommand" = "http" ]; then
+  ldflags="-X $runtime.GitCommit=$commit"
   binary="users-http"
   tags="http"
 
