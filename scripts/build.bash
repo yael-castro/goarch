@@ -37,7 +37,9 @@ function build() {
 
 
 if [ "$subcommand" = "relay" ]; then
-  ldflags='-extldflags "-static" -linkmode external -w -s '
+  ldflags="-X $runtime.GitCommit=$commit"
+  ldflags+=' -extldflags "-static" -linkmode external -w -s '
+
   binary="users-relay"
   tags="relay,musl"
 
